@@ -15,6 +15,7 @@ import { ImportCurlDialog } from "@/components/ImportCurlDialog";
 import { CodeGeneratorDialog } from "@/components/CodeGeneratorDialog";
 import { ScriptEditor } from "@/components/ScriptEditor";
 import { CodeEditor } from "@/components/CodeEditor";
+import { AuthPanel } from "@/components/AuthPanel";
 import { runScript } from "@/lib/scriptRunner";
 import { useLiveQuery } from "dexie-react-hooks";
 
@@ -33,13 +34,19 @@ const METHOD_COLORS: Record<string, string> = {
 export function RequestPanel({ onResponse }: RequestPanelProps) {
     const { setMethod, setUrl, setParams, setHeaders, setBody, activeEnvironmentId, updateTab, activeTabId } = useAppStore();
     const currentRequest = useCurrentRequest();
-    const { method, url, params, headers, body, bodyType, bodyRawLanguage, bodyFormData, bodyFormUrlEncoded, preScript, postScript } = currentRequest;
+    const { method, url, params, headers, body, bodyType, bodyRawLanguage, bodyFormData, bodyFormUrlEncoded, preScript, postScript, auth } = currentRequest;
+    const [saveDialogOpen, setSaveDialogOpen] = useState(false);
 
     // Default values if undefined (migration)
+    const effectiveParams = params || [];
+    const effectiveHeaders = headers || [];
     const effectiveBodyType = bodyType || 'json';
     const effectiveRawLanguage = bodyRawLanguage || 'json';
     const effectiveFormData = bodyFormData || [{ key: '', value: '', type: 'text' }];
     const effectiveUrlEncoded = bodyFormUrlEncoded || [{ key: '', value: '' }];
+    const effectivePreScript = preScript || "";
+    const effectivePostScript = postScript || "";
+    const effectiveAuth = auth || { type: "none" };
 
     const activeEnv = useLiveQuery(async () => {
         if (!activeEnvironmentId) return null;
@@ -67,41 +74,68 @@ export function RequestPanel({ onResponse }: RequestPanelProps) {
             const startTime = Date.now();
 
             const paramObj: Record<string, string> = {};
-            params.forEach(p => {
+            effectiveParams.forEach(p => {
                 if (p.key) paramObj[substituteVariables(p.key)] = substituteVariables(p.value)
             });
 
-            const queryString = new URLSearchParams(paramObj).toString();
-            const urlWithVars = substituteVariables(url);
-            const finalUrl = queryString ? `${urlWithVars}?${queryString}` : urlWithVars;
-
             const headerObj: Record<string, string> = {};
-            headers.forEach(h => {
+            effectiveHeaders.forEach(h => {
                 if (h.key) headerObj[substituteVariables(h.key)] = substituteVariables(h.value)
             });
 
-            const bodyWithVars = (method !== "GET" && method !== "HEAD") ? substituteVariables(body) : undefined;
+            // ─── Apply Authentication ───
+            if (effectiveAuth.type === 'basic' && effectiveAuth.basic) {
+                const { username, password } = effectiveAuth.basic;
+                const subsUser = substituteVariables(username);
+                const subsPass = substituteVariables(password);
+                const credentials = btoa(`${subsUser}:${subsPass}`);
+                headerObj['Authorization'] = `Basic ${credentials}`;
+            } else if (effectiveAuth.type === 'bearer' && effectiveAuth.bearer) {
+                const subsToken = substituteVariables(effectiveAuth.bearer.token);
+                headerObj['Authorization'] = `Bearer ${subsToken}`;
+            } else if (effectiveAuth.type === 'apikey' && effectiveAuth.apikey) {
+                const subsKey = substituteVariables(effectiveAuth.apikey.key);
+                const subsValue = substituteVariables(effectiveAuth.apikey.value);
+                if (effectiveAuth.apikey.addTo === 'header') {
+                    headerObj[subsKey] = subsValue;
+                } else {
+                    paramObj[subsKey] = subsValue;
+                }
+            }
+
+            const queryString = new URLSearchParams(paramObj).toString();
+            const urlWithVars = substituteVariables(url || "");
+            const finalUrl = queryString ? `${urlWithVars}?${queryString}` : urlWithVars;
+
+            if (!finalUrl || finalUrl.trim() === "") {
+                onResponse({
+                    status: 0,
+                    statusText: 'Validation Error',
+                    error: 'URL is required',
+                    data: null
+                });
+                setLoading(false);
+                return;
+            }
+
+            const bodyWithVars = (method !== "GET" && method !== "HEAD") ? substituteVariables(body || "") : undefined;
 
             // ─── Run Pre-Request Script ───
             const envVars: Record<string, string> = {};
-            activeEnv?.variables.forEach((v: any) => {
-                if (v.enabled && v.key) envVars[v.key] = v.value;
-            });
+            if (activeEnv && activeEnv.variables) {
+                activeEnv.variables.forEach(v => {
+                    if (v.enabled && v.key) envVars[v.key] = v.value;
+                });
+            }
 
-            if (preScript.trim()) {
-                const preResult = runScript(preScript, {
+            if (effectivePreScript.trim()) {
+                const preResult = runScript(effectivePreScript, {
                     request: { method, url: finalUrl, headers: headerObj, body: bodyWithVars || '' },
                     environmentVars: envVars,
                 });
                 // Apply env updates from pre-script
                 if (Object.keys(preResult.envUpdates).length > 0) {
                     Object.assign(envVars, preResult.envUpdates);
-                    // Update headers/url with new vars
-                    Object.entries(preResult.envUpdates).forEach(([key, value]) => {
-                        const regex = new RegExp(`{{${key}}}`, 'g');
-                        if (headerObj[key] !== undefined) headerObj[key] = value;
-                        // Also update final URL if it contains the variable
-                    });
                 }
                 if (preResult.error) {
                     updateTab(activeTabId, { testResults: [], response: null });
@@ -133,7 +167,6 @@ export function RequestPanel({ onResponse }: RequestPanelProps) {
                     }
                 });
                 requestBody = fd;
-                // Let axios/proxy handle boundary
                 delete headerObj['Content-Type'];
             } else if (effectiveBodyType === 'urlencoded') {
                 const params = new URLSearchParams();
@@ -156,8 +189,22 @@ export function RequestPanel({ onResponse }: RequestPanelProps) {
                 url: finalUrl,
                 headers: headerObj,
                 body: requestBody,
-                bodyType: effectiveBodyType // Pass type for proxy to know how to handle if needed, though proxy might just pass body
+                bodyType: effectiveBodyType
+            }, {
+                validateStatus: () => true // Handle 400/500 errors via onResponse instead of throwing
             });
+
+            if (res.data.error && res.status >= 400) {
+                onResponse({
+                    status: res.status,
+                    statusText: res.statusText,
+                    error: res.data.error,
+                    details: res.data.details,
+                    data: res.data
+                });
+                setLoading(false);
+                return;
+            }
 
             const duration = Date.now() - startTime;
 
@@ -166,6 +213,7 @@ export function RequestPanel({ onResponse }: RequestPanelProps) {
                 url: finalUrl,
                 status: res.data.status,
                 duration,
+                environmentId: activeEnvironmentId || undefined,
                 createdAt: Date.now()
             });
 
@@ -179,8 +227,8 @@ export function RequestPanel({ onResponse }: RequestPanelProps) {
             let scriptLogs: string[] = [];
             let scriptError: string | undefined;
 
-            if (postScript.trim()) {
-                const postResult = runScript(postScript, {
+            if (effectivePostScript.trim()) {
+                const postResult = runScript(effectivePostScript, {
                     request: { method, url: finalUrl, headers: headerObj, body: bodyWithVars || '' },
                     response: {
                         status: res.data.status,
@@ -195,21 +243,30 @@ export function RequestPanel({ onResponse }: RequestPanelProps) {
                 scriptLogs = postResult.logs;
                 scriptError = postResult.error;
 
-                // Apply env updates from post-script
-                if (Object.keys(postResult.envUpdates).length > 0 && activeEnv && activeEnvironmentId) {
-                    const updatedVars = activeEnv.variables.map((v: any) => {
-                        if (v.key in postResult.envUpdates) {
-                            return { ...v, value: postResult.envUpdates[v.key] };
+                // Update environment variables if any was set via script
+                if (activeEnv && activeEnv.variables) {
+                    let updatedVars = [...activeEnv.variables];
+
+                    // Update existing
+                    updatedVars = updatedVars.map((v: any) => {
+                        if (v.key && envVars[v.key] !== undefined) {
+                            return { ...v, value: envVars[v.key] };
                         }
                         return v;
                     });
-                    // Add new vars that don't exist yet
+
+                    // Add new ones from script updates that weren't in env yet
                     Object.entries(postResult.envUpdates).forEach(([key, value]) => {
                         if (!updatedVars.find((v: any) => v.key === key)) {
-                            updatedVars.push({ key, value, enabled: true });
+                            updatedVars.push({ key, value: String(value), enabled: true });
+                        } else {
+                            // Also update if it exists but might have been changed in script
+                            const idx = updatedVars.findIndex(v => v.key === key);
+                            if (idx !== -1) updatedVars[idx].value = String(value);
                         }
                     });
-                    await db.environments.update(activeEnvironmentId, { variables: updatedVars });
+
+                    await db.environments.update(activeEnv.id!, { variables: updatedVars });
                 }
             }
 
@@ -235,7 +292,48 @@ export function RequestPanel({ onResponse }: RequestPanelProps) {
         }
     };
 
-    const hasScripts = preScript.trim() || postScript.trim();
+    const handleQuickSave = async () => {
+        const isSaved = !isNaN(Number(activeTabId));
+        if (isSaved) {
+            try {
+                const requestData = {
+                    name: currentRequest.label || "Untitled Request",
+                    method,
+                    url,
+                    params: effectiveParams.reduce((acc: any, p) => (p.key ? { ...acc, [p.key]: p.value } : acc), {}),
+                    headers: effectiveHeaders.reduce((acc: any, h) => (h.key ? { ...acc, [h.key]: h.value } : acc), {}),
+                    body,
+                    bodyType: effectiveBodyType,
+                    bodyRawLanguage: effectiveRawLanguage,
+                    bodyFormData: effectiveFormData,
+                    bodyFormUrlEncoded: effectiveUrlEncoded,
+                    auth,
+                    environmentId: activeEnvironmentId || undefined,
+                };
+                await db.requests.update(Number(activeTabId), requestData);
+                updateTab(activeTabId, { isDirty: false });
+                console.log("Quick saved request:", activeTabId);
+            } catch (error) {
+                console.error("Failed to quick save:", error);
+            }
+        } else {
+            setSaveDialogOpen(true);
+        }
+    };
+
+    // Global keyboard shortcuts
+    React.useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+                e.preventDefault();
+                handleQuickSave();
+            }
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [activeTabId, currentRequest, method, url, effectiveParams, effectiveHeaders, body, effectiveAuth, activeEnvironmentId]);
+
+    const hasScripts = effectivePreScript.trim() || effectivePostScript.trim();
 
     return (
         <div className="flex-1 flex flex-col h-full min-w-0">
@@ -271,7 +369,7 @@ export function RequestPanel({ onResponse }: RequestPanelProps) {
                         {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
                         Send
                     </Button>
-                    <SaveRequestDialog />
+                    <SaveRequestDialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen} />
                 </div>
                 {/* ─── Toolbar ─── */}
                 <div className="flex items-center gap-2 mt-2">
@@ -309,29 +407,29 @@ export function RequestPanel({ onResponse }: RequestPanelProps) {
                         <div className="space-y-2">
                             <div className="flex items-center justify-between mb-3">
                                 <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Query Parameters</h3>
-                                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setParams([...params, { key: "", value: "" }])}>
+                                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setParams([...effectiveParams, { key: "", value: "" }])}>
                                     <Plus className="h-3 w-3 mr-1" /> Add
                                 </Button>
                             </div>
-                            {params.map((p, i) => (
+                            {effectiveParams.map((p, i) => (
                                 <div key={i} className="flex gap-2 items-center group">
                                     <Input
                                         className="flex-1 text-xs h-8 bg-background/50 font-mono"
                                         placeholder="parameter_key"
                                         value={p.key}
-                                        onChange={(e) => { const n = [...params]; n[i].key = e.target.value; setParams(n); }}
+                                        onChange={(e) => { const n = [...effectiveParams]; n[i].key = e.target.value; setParams(n); }}
                                     />
                                     <Input
                                         className="flex-1 text-xs h-8 bg-background/50 font-mono"
                                         placeholder="value"
                                         value={p.value}
-                                        onChange={(e) => { const n = [...params]; n[i].value = e.target.value; setParams(n); }}
+                                        onChange={(e) => { const n = [...effectiveParams]; n[i].value = e.target.value; setParams(n); }}
                                     />
                                     <Button
                                         variant="ghost"
                                         size="icon"
                                         className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                                        onClick={() => setParams(params.filter((_, idx) => idx !== i))}
+                                        onClick={() => setParams(effectiveParams.filter((_, idx) => idx !== i))}
                                     >
                                         <X className="h-3 w-3" />
                                     </Button>
@@ -344,29 +442,29 @@ export function RequestPanel({ onResponse }: RequestPanelProps) {
                         <div className="space-y-2">
                             <div className="flex items-center justify-between mb-3">
                                 <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Headers</h3>
-                                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setHeaders([...headers, { key: "", value: "" }])}>
+                                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setHeaders([...effectiveHeaders, { key: "", value: "" }])}>
                                     <Plus className="h-3 w-3 mr-1" /> Add
                                 </Button>
                             </div>
-                            {headers.map((h, i) => (
+                            {effectiveHeaders.map((h, i) => (
                                 <div key={i} className="flex gap-2 items-center group">
                                     <Input
                                         className="flex-1 text-xs h-8 bg-background/50 font-mono"
                                         placeholder="Header-Name"
                                         value={h.key}
-                                        onChange={(e) => { const n = [...headers]; n[i].key = e.target.value; setHeaders(n); }}
+                                        onChange={(e) => { const n = [...effectiveHeaders]; n[i].key = e.target.value; setHeaders(n); }}
                                     />
                                     <Input
                                         className="flex-1 text-xs h-8 bg-background/50 font-mono"
                                         placeholder="value"
                                         value={h.value}
-                                        onChange={(e) => { const n = [...headers]; n[i].value = e.target.value; setHeaders(n); }}
+                                        onChange={(e) => { const n = [...effectiveHeaders]; n[i].value = e.target.value; setHeaders(n); }}
                                     />
                                     <Button
                                         variant="ghost"
                                         size="icon"
                                         className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                                        onClick={() => setHeaders(headers.filter((_, idx) => idx !== i))}
+                                        onClick={() => setHeaders(effectiveHeaders.filter((_, idx) => idx !== i))}
                                     >
                                         <X className="h-3 w-3" />
                                     </Button>
@@ -565,7 +663,7 @@ export function RequestPanel({ onResponse }: RequestPanelProps) {
                                         : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                                 )}
                             >
-                                Pre-request {preScript.trim() && "•"}
+                                Pre-request {effectivePreScript.trim() && "•"}
                             </button>
                             <button
                                 onClick={() => setScriptTab("post")}
@@ -576,7 +674,7 @@ export function RequestPanel({ onResponse }: RequestPanelProps) {
                                         : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                                 )}
                             >
-                                Post-response {postScript.trim() && "•"}
+                                Post-response {effectivePostScript.trim() && "•"}
                             </button>
                         </div>
 
@@ -597,14 +695,8 @@ export function RequestPanel({ onResponse }: RequestPanelProps) {
                         )}
                     </TabsContent>
 
-                    <TabsContent value="auth" className="mt-0 h-full">
-                        <div className="flex flex-col items-center justify-center h-40 text-muted-foreground/60">
-                            <div className="h-12 w-12 rounded-full bg-muted/50 flex items-center justify-center mb-3">
-                                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                            </div>
-                            <p className="text-xs font-medium">Authentication</p>
-                            <p className="text-[10px] mt-1">Coming soon — OAuth 2.0, API Key, Bearer</p>
-                        </div>
+                    <TabsContent value="auth" className="mt-0 h-full p-2">
+                        <AuthPanel />
                     </TabsContent>
                 </div>
             </Tabs>

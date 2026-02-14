@@ -33,20 +33,23 @@ export function EnvironmentManager() {
 
     const updateVariable = async (index: number, field: "key" | "value" | "enabled", value: any) => {
         if (!selectedEnv || !selectedEnv.id) return;
-        const newVars = [...selectedEnv.variables];
+        const currentVars = selectedEnv.variables || [];
+        const newVars = [...currentVars];
         newVars[index] = { ...newVars[index], [field]: value };
         await db.environments.update(selectedEnv.id, { variables: newVars });
     };
 
     const addVariable = async () => {
         if (!selectedEnv || !selectedEnv.id) return;
-        const newVars = [...selectedEnv.variables, { key: "", value: "", enabled: true }];
+        const currentVars = selectedEnv.variables || [];
+        const newVars = [...currentVars, { key: "", value: "", enabled: true }];
         await db.environments.update(selectedEnv.id, { variables: newVars });
     };
 
     const removeVariable = async (index: number) => {
         if (!selectedEnv || !selectedEnv.id) return;
-        const newVars = selectedEnv.variables.filter((_, i) => i !== index);
+        const currentVars = selectedEnv.variables || [];
+        const newVars = currentVars.filter((_, i) => i !== index);
         await db.environments.update(selectedEnv.id, { variables: newVars });
     };
 
@@ -106,7 +109,7 @@ export function EnvironmentManager() {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {selectedEnv.variables.map((v: any, i: number) => (
+                                            {(selectedEnv.variables || []).map((v: any, i: number) => (
                                                 <tr key={i} className="border-b">
                                                     <td className="p-2">
                                                         <input type="checkbox" checked={v.enabled} onChange={(e) => updateVariable(i, "enabled", e.target.checked)} />

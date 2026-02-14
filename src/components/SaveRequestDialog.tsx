@@ -11,23 +11,40 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { useAppStore, useCurrentRequest } from "../lib/store";
 import { Save } from "lucide-react";
 
-export function SaveRequestDialog() {
+interface SaveRequestDialogProps {
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+}
+
+export function SaveRequestDialog({ open: externalOpen, onOpenChange: externalOnOpenChange }: SaveRequestDialogProps) {
     const currentRequest = useCurrentRequest();
     const collections = useLiveQuery(() => db.collections.toArray());
 
-    const [open, setOpen] = useState(false);
+    const [internalOpen, setInternalOpen] = useState(false);
+    const open = externalOpen !== undefined ? externalOpen : internalOpen;
+    const setOpen = externalOnOpenChange !== undefined ? externalOnOpenChange : setInternalOpen;
+
     const [name, setName] = useState("");
     const [collectionId, setCollectionId] = useState<string>("none"); // "none" or number as string
     const [newCollectionName, setNewCollectionName] = useState("");
     const [isCreatingCollection, setIsCreatingCollection] = useState(false);
 
+    // Initialize name when dialog opens
+    React.useEffect(() => {
+        if (open) {
+            setName(currentRequest.label || "");
+        }
+    }, [open, currentRequest.label]);
+
     const handleSave = async () => {
+        const { activeEnvironmentId, updateTab, activeTabId } = useAppStore.getState();
         try {
             let targetCollectionId: number | undefined = undefined;
 
             if (isCreatingCollection && newCollectionName.trim()) {
                 const id = await db.collections.add({
                     name: newCollectionName,
+                    environmentId: activeEnvironmentId || undefined,
                     createdAt: Date.now()
                 });
                 targetCollectionId = id as number;
@@ -35,43 +52,35 @@ export function SaveRequestDialog() {
                 targetCollectionId = parseInt(collectionId);
             }
 
-            const { updateTab, activeTabId, addTab, tabs } = useAppStore.getState();
+            // Check if the current request is already saved (has an ID that corresponds to a DB item)
+            const isSaved = !isNaN(Number(activeTabId));
 
-            // Check if the current request is already saved (has an ID)
-            // If it has an ID, we should update it instead of adding a new one
-            if (currentRequest.id) {
-                await db.requests.update(currentRequest.id, {
-                    name: name || "Untitled Request",
-                    collectionId: targetCollectionId,
-                    method: currentRequest.method,
-                    url: currentRequest.url,
-                    params: currentRequest.params.reduce((acc, p) => (p.key ? { ...acc, [p.key]: p.value } : acc), {}),
-                    headers: currentRequest.headers.reduce((acc, h) => (h.key ? { ...acc, [h.key]: h.value } : acc), {}),
-                    body: currentRequest.body,
-                    bodyType: currentRequest.bodyType,
-                    bodyRawLanguage: currentRequest.bodyRawLanguage,
-                    bodyFormData: currentRequest.bodyFormData,
-                    bodyFormUrlEncoded: currentRequest.bodyFormUrlEncoded,
-                });
+            const requestData = {
+                name: name || "Untitled Request",
+                collectionId: targetCollectionId,
+                method: currentRequest.method,
+                url: currentRequest.url,
+                params: currentRequest.params.reduce((acc, p) => (p.key ? { ...acc, [p.key]: p.value } : acc), {}),
+                headers: currentRequest.headers.reduce((acc, h) => (h.key ? { ...acc, [h.key]: h.value } : acc), {}),
+                body: currentRequest.body,
+                bodyType: currentRequest.bodyType,
+                bodyRawLanguage: currentRequest.bodyRawLanguage,
+                bodyFormData: currentRequest.bodyFormData,
+                bodyFormUrlEncoded: currentRequest.bodyFormUrlEncoded,
+                auth: currentRequest.auth,
+                environmentId: activeEnvironmentId || undefined,
+            };
+
+            if (isSaved) {
+                await db.requests.update(Number(activeTabId), requestData);
                 updateTab(activeTabId, {
                     label: name || "Untitled Request",
                     isDirty: false,
-                    id: currentRequest.id.toString() // Ensure the tab ID matches the saved request ID
                 });
             } else {
                 // If it's a new request, add it to the database
                 const newRequestId = await db.requests.add({
-                    name: name || "Untitled Request",
-                    collectionId: targetCollectionId,
-                    method: currentRequest.method,
-                    url: currentRequest.url,
-                    params: currentRequest.params.reduce((acc, p) => (p.key ? { ...acc, [p.key]: p.value } : acc), {}),
-                    headers: currentRequest.headers.reduce((acc, h) => (h.key ? { ...acc, [h.key]: h.value } : acc), {}),
-                    body: currentRequest.body,
-                    bodyType: currentRequest.bodyType,
-                    bodyRawLanguage: currentRequest.bodyRawLanguage,
-                    bodyFormData: currentRequest.bodyFormData,
-                    bodyFormUrlEncoded: currentRequest.bodyFormUrlEncoded,
+                    ...requestData,
                     createdAt: Date.now()
                 });
 
@@ -95,10 +104,12 @@ export function SaveRequestDialog() {
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button variant="secondary">
-                    <Save className="mr-2 h-4 w-4" />
-                    Save
-                </Button>
+                {!externalOpen && (
+                    <Button variant="secondary">
+                        <Save className="mr-2 h-4 w-4" />
+                        Save
+                    </Button>
+                )}
             </DialogTrigger>
             <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>

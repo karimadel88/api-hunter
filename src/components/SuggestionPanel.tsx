@@ -14,10 +14,12 @@ export function SuggestionPanel() {
     useEffect(() => {
         // Analyze request and generate suggestions
         const newSuggestions = [];
+        const safeHeaders = currentRequest.headers || [];
+        const safeBody = currentRequest.body || "";
 
         // Rule 1: JSON Body for POST/PUT without proper header
         if (["POST", "PUT", "PATCH"].includes(currentRequest.method)) {
-            const hasContentType = currentRequest.headers.some(h => h.key.toLowerCase() === "content-type");
+            const hasContentType = safeHeaders.some(h => h.key.toLowerCase() === "content-type");
             if (!hasContentType) {
                 newSuggestions.push({
                     id: "missing-json-header",
@@ -26,13 +28,13 @@ export function SuggestionPanel() {
                     description: "You are sending data but missing the Content-Type header.",
                     actionLabel: "Add Header",
                     action: () => {
-                        setHeaders([...currentRequest.headers.filter(h => h.key), { key: "Content-Type", value: "application/json" }]);
+                        setHeaders([...safeHeaders.filter(h => h.key), { key: "Content-Type", value: "application/json" }]);
                     }
                 });
             }
 
             // Rule 2: Empty Body
-            if (!currentRequest.body || currentRequest.body.trim() === "") {
+            if (!safeBody || safeBody.trim() === "") {
                 newSuggestions.push({
                     id: "empty-body",
                     type: "suggestion",
@@ -47,7 +49,7 @@ export function SuggestionPanel() {
         }
 
         // Rule 3: Auth hint
-        if (currentRequest.url.includes("api") && !currentRequest.headers.some(h => h.key.toLowerCase() === "authorization")) {
+        if (currentRequest.url.includes("api") && !safeHeaders.some(h => h.key.toLowerCase() === "authorization")) {
             newSuggestions.push({
                 id: "auth-missing",
                 type: "info",
@@ -55,7 +57,7 @@ export function SuggestionPanel() {
                 description: "This looks like a protected API endpoint. Consider adding a Bearer token.",
                 actionLabel: "Add Auth Header",
                 action: () => {
-                    setHeaders([...currentRequest.headers.filter(h => h.key), { key: "Authorization", value: "Bearer YOUR_TOKEN" }]);
+                    setHeaders([...safeHeaders.filter(h => h.key), { key: "Authorization", value: "Bearer YOUR_TOKEN" }]);
                 }
             });
         }

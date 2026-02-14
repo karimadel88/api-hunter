@@ -43,8 +43,9 @@ export async function POST(req: NextRequest) {
             url,
             headers: requestHeaders,
             data: body || undefined,
-            validateStatus: () => true, // resolve promise for all status codes
+            validateStatus: () => true,
             timeout: 30000,
+            responseType: 'arraybuffer', // Fetch as buffer to handle binary data
             transitional: {
                 clarifyTimeoutError: true
             },
@@ -54,23 +55,40 @@ export async function POST(req: NextRequest) {
         const endTime = Date.now();
         const duration = endTime - startTime;
 
-        // Convert AxiosHeaders to a plain object for JSON serialization
+        // Convert AxiosHeaders to a plain object
         const responseHeaders: Record<string, string> = {};
         if (response.headers) {
             Object.entries(response.headers).forEach(([key, value]) => {
+                const lowerKey = key.toLowerCase();
                 if (typeof value === 'string') {
-                    responseHeaders[key] = value;
+                    responseHeaders[lowerKey] = value;
                 } else if (Array.isArray(value)) {
-                    responseHeaders[key] = value.join(', ');
+                    responseHeaders[lowerKey] = value.join(', ');
                 }
             });
+        }
+
+        const contentType = responseHeaders['content-type'] || '';
+        let data: any;
+
+        if (contentType.includes('image/') || contentType.includes('application/pdf') || contentType.includes('video/')) {
+            // Convert buffer to base64 for binary types
+            data = Buffer.from(response.data).toString('base64');
+        } else {
+            // Try to parse as JSON if it's text, otherwise just use string
+            const text = Buffer.from(response.data).toString('utf-8');
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                data = text;
+            }
         }
 
         return NextResponse.json({
             status: response.status,
             statusText: response.statusText,
             headers: responseHeaders,
-            data: response.data,
+            data,
             duration,
         });
     } catch (error: any) {

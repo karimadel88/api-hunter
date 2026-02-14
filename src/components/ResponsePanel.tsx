@@ -132,14 +132,14 @@ export function ResponsePanel({ response, orientation = "vertical" }: ResponsePa
                         >
                             <FlaskConical className="h-3 w-3 mr-1" />
                             Tests
-                            {currentRequest.testResults.length > 0 && (
+                            {(currentRequest.testResults || []).length > 0 && (
                                 <span className={cn(
                                     "ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full font-medium",
-                                    currentRequest.testResults.every(r => r.passed)
+                                    (currentRequest.testResults || []).every(r => r.passed)
                                         ? "bg-emerald-500/10 text-emerald-400"
                                         : "bg-red-500/10 text-red-400"
                                 )}>
-                                    {currentRequest.testResults.filter(r => r.passed).length}/{currentRequest.testResults.length}
+                                    {(currentRequest.testResults || []).filter(r => r.passed).length}/{(currentRequest.testResults || []).length}
                                 </span>
                             )}
                         </TabsTrigger>
@@ -149,6 +149,7 @@ export function ResponsePanel({ response, orientation = "vertical" }: ResponsePa
                 <TabsContent value="body" className="flex-1 mt-0 overflow-hidden">
                     <ResponseFormatter
                         data={response.data || response.error}
+                        contentType={responseHeaders["content-type"]}
                         status={response.status}
                     />
                 </TabsContent>

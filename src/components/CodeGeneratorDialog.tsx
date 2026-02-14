@@ -20,10 +20,10 @@ function generateCode(
     lang: Lang,
     method: string,
     url: string,
-    headers: { key: string; value: string }[],
-    body: string
+    headers: { key: string; value: string }[] = [],
+    body: string = ""
 ): string {
-    const activeHeaders = headers.filter(h => h.key);
+    const activeHeaders = (headers || []).filter(h => h.key);
     const hasBody = body && method !== "GET" && method !== "HEAD";
 
     switch (lang) {

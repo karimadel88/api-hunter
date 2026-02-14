@@ -12,6 +12,22 @@ export interface TestResult {
     error?: string;
 }
 
+export interface AuthConfig {
+    type: 'none' | 'basic' | 'bearer' | 'apikey';
+    basic?: {
+        username: string;
+        password: string;
+    };
+    bearer?: {
+        token: string;
+    };
+    apikey?: {
+        key: string;
+        value: string;
+        addTo: 'header' | 'query';
+    };
+}
+
 export interface RequestTab {
     id: string;
     label: string;
@@ -29,6 +45,7 @@ export interface RequestTab {
     preScript: string;
     postScript: string;
     testResults: TestResult[];
+    auth: AuthConfig;
 }
 
 function createTab(partial?: Partial<RequestTab>): RequestTab {
@@ -49,6 +66,7 @@ function createTab(partial?: Partial<RequestTab>): RequestTab {
         preScript: '',
         postScript: '',
         testResults: [],
+        auth: { type: 'none' },
         ...partial,
     };
 }
