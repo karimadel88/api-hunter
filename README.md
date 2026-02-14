@@ -78,5 +78,4 @@ We are actively working on making API Hunter more powerful. Here’s what’s co
 
 ---
 
-Built with ❤️ by the API Hunter Team
 
