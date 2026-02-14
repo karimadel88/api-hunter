@@ -5,6 +5,7 @@ import axios from "axios";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, X, Plus, Send, FileCode2 } from "lucide-react";
 import { db } from "@/lib/db";
 import { cn } from "@/lib/utils";
@@ -13,6 +14,7 @@ import { SaveRequestDialog } from "@/components/SaveRequestDialog";
 import { ImportCurlDialog } from "@/components/ImportCurlDialog";
 import { CodeGeneratorDialog } from "@/components/CodeGeneratorDialog";
 import { ScriptEditor } from "@/components/ScriptEditor";
+import { CodeEditor } from "@/components/CodeEditor";
 import { runScript } from "@/lib/scriptRunner";
 import { useLiveQuery } from "dexie-react-hooks";
 
@@ -31,7 +33,13 @@ const METHOD_COLORS: Record<string, string> = {
 export function RequestPanel({ onResponse }: RequestPanelProps) {
     const { setMethod, setUrl, setParams, setHeaders, setBody, activeEnvironmentId, updateTab, activeTabId } = useAppStore();
     const currentRequest = useCurrentRequest();
-    const { method, url, params, headers, body, preScript, postScript } = currentRequest;
+    const { method, url, params, headers, body, bodyType, bodyRawLanguage, bodyFormData, bodyFormUrlEncoded, preScript, postScript } = currentRequest;
+
+    // Default values if undefined (migration)
+    const effectiveBodyType = bodyType || 'json';
+    const effectiveRawLanguage = bodyRawLanguage || 'json';
+    const effectiveFormData = bodyFormData || [{ key: '', value: '', type: 'text' }];
+    const effectiveUrlEncoded = bodyFormUrlEncoded || [{ key: '', value: '' }];
 
     const activeEnv = useLiveQuery(async () => {
         if (!activeEnvironmentId) return null;
@@ -110,11 +118,45 @@ export function RequestPanel({ onResponse }: RequestPanelProps) {
             }
 
             // ─── Send Request ───
+            let requestBody: any = bodyWithVars;
+
+            if (effectiveBodyType === 'form-data') {
+                const fd = new FormData();
+                effectiveFormData.forEach(item => {
+                    if (item.key) {
+                        const key = substituteVariables(item.key);
+                        if (item.type === 'file' && item.file) {
+                            fd.append(key, item.file);
+                        } else {
+                            fd.append(key, substituteVariables(item.value));
+                        }
+                    }
+                });
+                requestBody = fd;
+                // Let axios/proxy handle boundary
+                delete headerObj['Content-Type'];
+            } else if (effectiveBodyType === 'urlencoded') {
+                const params = new URLSearchParams();
+                effectiveUrlEncoded.forEach(item => {
+                    if (item.key) params.append(substituteVariables(item.key), substituteVariables(item.value));
+                });
+                requestBody = params.toString();
+                headerObj['Content-Type'] = 'application/x-www-form-urlencoded';
+            } else {
+                if (!headerObj['Content-Type']) {
+                    if (effectiveRawLanguage === 'json') headerObj['Content-Type'] = 'application/json';
+                    else if (effectiveRawLanguage === 'xml') headerObj['Content-Type'] = 'application/xml';
+                    else if (effectiveRawLanguage === 'html') headerObj['Content-Type'] = 'text/html';
+                    else headerObj['Content-Type'] = 'text/plain';
+                }
+            }
+
             const res = await axios.post("/api/proxy", {
                 method,
                 url: finalUrl,
                 headers: headerObj,
-                body: bodyWithVars
+                body: requestBody,
+                bodyType: effectiveBodyType // Pass type for proxy to know how to handle if needed, though proxy might just pass body
             });
 
             const duration = Date.now() - startTime;
@@ -334,14 +376,181 @@ export function RequestPanel({ onResponse }: RequestPanelProps) {
                     </TabsContent>
 
                     <TabsContent value="body" className="mt-0 h-full flex flex-col">
-                        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Request Body (JSON / XML)</h3>
-                        <textarea
-                            className="flex-1 w-full p-3 border border-border/50 rounded-lg font-mono text-sm bg-background/50 resize-none outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 transition-all leading-relaxed"
-                            value={body}
-                            onChange={(e) => setBody(e.target.value)}
-                            placeholder='{ "key": "value" }'
-                            spellCheck={false}
-                        />
+                        <div className="flex items-center justify-between mb-3 bg-muted/20 p-2 rounded-md">
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    variant={effectiveBodyType === 'json' ? "secondary" : "ghost"}
+                                    size="sm"
+                                    onClick={() => updateTab(activeTabId, { bodyType: 'json' })}
+                                    className="h-7 text-xs"
+                                >
+                                    Raw
+                                </Button>
+                                {effectiveBodyType === 'json' && (
+                                    <Select
+                                        value={effectiveRawLanguage}
+                                        onValueChange={(v) => updateTab(activeTabId, { bodyRawLanguage: v as any })}
+                                    >
+                                        <SelectTrigger className="h-7 w-[70px] text-xs bg-transparent border-none shadow-none focus:ring-0 focus:ring-offset-0 px-1 gap-1 text-muted-foreground hover:text-foreground data-[state=open]:bg-transparent">
+                                            <SelectValue placeholder="Lang" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="json">JSON</SelectItem>
+                                            <SelectItem value="xml">XML</SelectItem>
+                                            <SelectItem value="html">HTML</SelectItem>
+                                            <SelectItem value="text">Text</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                )}
+                                <Button
+                                    variant={effectiveBodyType === 'form-data' ? "secondary" : "ghost"}
+                                    size="sm"
+                                    onClick={() => updateTab(activeTabId, { bodyType: 'form-data' })}
+                                    className="h-7 text-xs"
+                                >
+                                    Form Data
+                                </Button>
+                                <Button
+                                    variant={effectiveBodyType === 'urlencoded' ? "secondary" : "ghost"}
+                                    size="sm"
+                                    onClick={() => updateTab(activeTabId, { bodyType: 'urlencoded' })}
+                                    className="h-7 text-xs"
+                                >
+                                    x-www-form-urlencoded
+                                </Button>
+                            </div>
+                            {effectiveBodyType === 'json' && effectiveRawLanguage === 'json' && (
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 text-[10px] hover:bg-indigo-500/10 hover:text-indigo-400"
+                                    onClick={() => {
+                                        try {
+                                            const parsed = JSON.parse(body);
+                                            setBody(JSON.stringify(parsed, null, 2));
+                                        } catch (e) { }
+                                    }}
+                                    title="Format JSON"
+                                >
+                                    <FileCode2 className="mr-1 h-3 w-3" />
+                                    Format
+                                </Button>
+                            )}
+                        </div>
+
+                        {effectiveBodyType === 'json' && (
+                            <CodeEditor
+                                value={body}
+                                onChange={(v) => setBody(v)}
+                                language={effectiveRawLanguage}
+                                className="flex-1"
+                            />
+                        )}
+
+                        {effectiveBodyType === 'form-data' && (
+                            <div className="space-y-2 overflow-auto">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Multipart Form Data</span>
+                                    <Button variant="outline" size="sm" className="h-6 text-[10px]"
+                                        onClick={() => updateTab(activeTabId, { bodyFormData: [...effectiveFormData, { key: '', value: '', type: 'text' }] })}>
+                                        <Plus className="h-3 w-3 mr-1" /> Add Field
+                                    </Button>
+                                </div>
+                                {effectiveFormData.map((field, i) => (
+                                    <div key={i} className="flex gap-2 items-center group">
+                                        <Input
+                                            className="flex-1 text-xs h-8 font-mono"
+                                            placeholder="Key"
+                                            value={field.key || ''}
+                                            onChange={(e) => {
+                                                const n = [...effectiveFormData];
+                                                n[i] = { ...n[i], key: e.target.value };
+                                                updateTab(activeTabId, { bodyFormData: n });
+                                            }}
+                                        />
+                                        <select
+                                            className="h-8 rounded border px-2 text-xs bg-background"
+                                            value={field.type}
+                                            onChange={(e) => {
+                                                const n = [...effectiveFormData];
+                                                n[i] = { ...n[i], type: e.target.value as 'text' | 'file' };
+                                                updateTab(activeTabId, { bodyFormData: n });
+                                            }}
+                                        >
+                                            <option value="text">Text</option>
+                                            <option value="file">File</option>
+                                        </select>
+                                        {field.type === 'file' ? (
+                                            <Input
+                                                type="file"
+                                                className="flex-[2] text-xs h-8 file:text-xs file:h-full file:mr-2"
+                                                onChange={(e) => {
+                                                    const file = e.target.files?.[0];
+                                                    const n = [...effectiveFormData];
+                                                    n[i] = { ...n[i], file: file, value: file?.name || '' };
+                                                    updateTab(activeTabId, { bodyFormData: n });
+                                                }}
+                                            />
+                                        ) : (
+                                            <Input
+                                                className="flex-[2] text-xs h-8 font-mono"
+                                                placeholder="Value"
+                                                value={field.value || ''}
+                                                onChange={(e) => {
+                                                    const n = [...effectiveFormData];
+                                                    n[i] = { ...n[i], value: e.target.value };
+                                                    updateTab(activeTabId, { bodyFormData: n });
+                                                }}
+                                            />
+                                        )}
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100"
+                                            onClick={() => updateTab(activeTabId, { bodyFormData: effectiveFormData.filter((_, idx) => idx !== i) })}>
+                                            <X className="h-3 w-3" />
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {effectiveBodyType === 'urlencoded' && (
+                            <div className="space-y-2 overflow-auto">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider">x-www-form-urlencoded</span>
+                                    <Button variant="outline" size="sm" className="h-6 text-[10px]"
+                                        onClick={() => updateTab(activeTabId, { bodyFormUrlEncoded: [...effectiveUrlEncoded, { key: '', value: '' }] })}>
+                                        <Plus className="h-3 w-3 mr-1" /> Add Field
+                                    </Button>
+                                </div>
+                                {effectiveUrlEncoded.map((field, i) => (
+                                    <div key={i} className="flex gap-2 items-center group">
+                                        <Input
+                                            className="flex-1 text-xs h-8 font-mono"
+                                            placeholder="Key"
+                                            value={field.key || ''}
+                                            onChange={(e) => {
+                                                const n = [...effectiveUrlEncoded];
+                                                n[i] = { ...n[i], key: e.target.value };
+                                                updateTab(activeTabId, { bodyFormUrlEncoded: n });
+                                            }}
+                                        />
+                                        <Input
+                                            className="flex-[2] text-xs h-8 font-mono"
+                                            placeholder="Value"
+                                            value={field.value || ''}
+                                            onChange={(e) => {
+                                                const n = [...effectiveUrlEncoded];
+                                                n[i] = { ...n[i], value: e.target.value };
+                                                updateTab(activeTabId, { bodyFormUrlEncoded: n });
+                                            }}
+                                        />
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100"
+                                            onClick={() => updateTab(activeTabId, { bodyFormUrlEncoded: effectiveUrlEncoded.filter((_, idx) => idx !== i) })}>
+                                            <X className="h-3 w-3" />
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </TabsContent>
 
                     <TabsContent value="scripts" className="mt-0 h-full flex flex-col">

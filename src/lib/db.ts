@@ -4,6 +4,7 @@ export interface Collection {
     id?: number;
     name: string;
     parentId?: number; // For nested folders
+    environmentId?: number;
     createdAt: number;
 }
 
@@ -16,7 +17,12 @@ export interface RequestItem {
     headers: Record<string, string>;
     params: Record<string, string>;
     body?: string;
+    bodyType?: 'json' | 'form-data' | 'urlencoded';
+    bodyRawLanguage?: 'json' | 'xml' | 'html' | 'text';
+    bodyFormData?: { key: string; value: string; type: 'text' | 'file'; file?: File; fileName?: string }[];
+    bodyFormUrlEncoded?: { key: string; value: string }[];
     auth?: { type: string;[key: string]: any };
+    environmentId?: number;
     createdAt: number;
 }
 
@@ -26,6 +32,7 @@ export interface HistoryItem {
     url: string;
     status: number;
     duration: number;
+    environmentId?: number;
     createdAt: number;
 }
 
@@ -93,6 +100,21 @@ export interface TestStepResult {
     error?: string;
 }
 
+// ── Phase 4: Mock Server ──
+
+export interface MockRoute {
+    id?: number;
+    method: string;
+    path: string;              // e.g. "/api/users/:id"
+    responseStatus: number;
+    responseHeaders: Record<string, string>;
+    responseBody: string;
+    delay: number;             // simulated latency in ms
+    enabled: boolean;
+    description?: string;
+    createdAt: number;
+}
+
 export class ApiHunterDB extends Dexie {
     collections!: Table<Collection>;
     requests!: Table<RequestItem>;
@@ -100,6 +122,7 @@ export class ApiHunterDB extends Dexie {
     environments!: Table<Environment>;
     testScenarios!: Table<TestScenario>;
     testRuns!: Table<TestRunResult>;
+    mockRoutes!: Table<MockRoute>;
 
     constructor() {
         super('ApiHunterDB');
@@ -116,6 +139,24 @@ export class ApiHunterDB extends Dexie {
             environments: '++id, name',
             testScenarios: '++id, name, createdAt',
             testRuns: '++id, scenarioId, startTime',
+        });
+        this.version(3).stores({
+            collections: '++id, parentId, name',
+            requests: '++id, collectionId, name',
+            history: '++id, createdAt',
+            environments: '++id, name',
+            testScenarios: '++id, name, createdAt',
+            testRuns: '++id, scenarioId, startTime',
+            mockRoutes: '++id, method, path, enabled',
+        });
+        this.version(4).stores({
+            collections: '++id, parentId, name, environmentId',
+            requests: '++id, collectionId, name, environmentId',
+            history: '++id, createdAt, environmentId',
+            environments: '++id, name',
+            testScenarios: '++id, name, createdAt',
+            testRuns: '++id, scenarioId, startTime',
+            mockRoutes: '++id, method, path, enabled',
         });
     }
 }

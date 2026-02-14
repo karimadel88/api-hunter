@@ -6,8 +6,11 @@ import { ThemeProvider } from "@/components/theme-provider";
 const inter = Inter({ subsets: ["latin"] }); // Added Inter font declaration
 
 export const metadata: Metadata = {
-  title: "Api Hunter", // Changed title
-  description: "Advanced API Testing Tool", // Changed description
+  title: "Api Hunter",
+  description: "Advanced API Testing Tool",
+  icons: {
+    icon: "/logo.png",
+  },
 };
 
 export default function RootLayout({

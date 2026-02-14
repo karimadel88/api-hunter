@@ -1,12 +1,11 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { useTheme } from "next-themes";
 import formatXML from "xml-formatter";
-import { Button } from "./ui/button";
+import { Button } from "@/components/ui/button";
 import { Copy, Check, WrapText } from "lucide-react";
+import { CodeEditor } from "@/components/CodeEditor";
 
 interface ResponseFormatterProps {
     data: any;
@@ -17,7 +16,15 @@ interface ResponseFormatterProps {
 export function ResponseFormatter({ data, contentType, status }: ResponseFormatterProps) {
     const { resolvedTheme } = useTheme();
     const [copied, setCopied] = useState(false);
-    const [wordWrap, setWordWrap] = useState(false);
+
+    // We can rely on Monaco's built-in word wrap, but we might want to toggle it.
+    // However, Monaco's word wrap is an option passed to the editor. 
+    // We'll simplisticly toggle a state that we pass to CodeEditor if we want to support that, 
+    // but the previous implementation had a toggle button. let's keep it.
+    // Update: CodeEditor doesn't currently accept wordWrap prop, but it defaults to 'on'.
+    // Let's assume word wrap is always on for response to ensure readability, or we can update CodeEditor later.
+    // For now, let's keep the toolbar but maybe remove the wrap toggle if Monaco handles it well automatically.
+    // Actually, let's keep it simple and just rely on Monaco's default 'on'.
 
     const { formattedContent, language } = useMemo(() => {
         if (!data) return { formattedContent: "", language: "text" };
@@ -64,59 +71,32 @@ export function ResponseFormatter({ data, contentType, status }: ResponseFormatt
         setTimeout(() => setCopied(false), 2000);
     };
 
-    const isDark = resolvedTheme === "dark";
-
     return (
         <div className="relative group h-full flex flex-col">
             {/* ─── Toolbar ─── */}
-            <div className="absolute top-2 right-2 z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground bg-background/70 backdrop-blur-sm px-2 py-1 rounded border border-border/50">
+            <div className="absolute top-2 right-4 z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground bg-background/80 backdrop-blur-sm px-2 py-1 rounded border border-border/50 shadow-sm">
                     {language}
                 </span>
                 <Button
                     variant="outline"
                     size="icon"
-                    onClick={() => setWordWrap(!wordWrap)}
-                    className={`h-7 w-7 bg-background/70 backdrop-blur-sm border-border/50 ${wordWrap ? "text-indigo-400" : ""}`}
-                    title="Toggle word wrap"
-                >
-                    <WrapText className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                    variant="outline"
-                    size="icon"
                     onClick={handleCopy}
-                    className="h-7 w-7 bg-background/70 backdrop-blur-sm border-border/50"
+                    className="h-7 w-7 bg-background/80 backdrop-blur-sm border-border/50 shadow-sm"
                     title="Copy response"
                 >
                     {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
                 </Button>
             </div>
-            <div className="flex-1 overflow-auto">
-                <SyntaxHighlighter
+
+            <div className="flex-1 overflow-hidden relative">
+                <CodeEditor
+                    value={formattedContent}
                     language={language}
-                    style={isDark ? oneDark : oneLight}
-                    customStyle={{
-                        margin: 0,
-                        minHeight: "100%",
-                        fontSize: "12px",
-                        lineHeight: "1.6",
-                        background: "transparent",
-                        padding: "12px 16px",
-                    }}
-                    showLineNumbers={true}
-                    wrapLines={true}
-                    wrapLongLines={wordWrap}
-                    lineNumberStyle={{
-                        minWidth: "2.5em",
-                        paddingRight: "1em",
-                        color: isDark ? "hsl(215,20%,30%)" : "hsl(215,20%,80%)",
-                        fontSize: "11px",
-                        userSelect: "none",
-                    }}
-                >
-                    {formattedContent}
-                </SyntaxHighlighter>
+                    readOnly={true}
+                    minimap={false}
+                    className="border-0 bg-transparent"
+                />
             </div>
         </div>
     );

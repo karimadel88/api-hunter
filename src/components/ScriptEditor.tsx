@@ -2,6 +2,7 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
+import { CodeEditor } from "@/components/CodeEditor";
 
 interface ScriptEditorProps {
     value: string;
@@ -39,28 +40,14 @@ export function ScriptEditor({ value, onChange, placeholder, className }: Script
             </div>
 
             {/* Editor */}
-            <textarea
-                className="flex-1 w-full p-3 border border-border/50 rounded-lg font-mono text-xs bg-background/50 resize-none outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 transition-all leading-relaxed tab-size-2"
-                value={value}
-                onChange={(e) => onChange(e.target.value)}
-                placeholder={placeholder || "// Write your script here...\n// Use pm.test(), pm.expect(), pm.environment, console.log()"}
-                spellCheck={false}
-                onKeyDown={(e) => {
-                    // Tab support
-                    if (e.key === "Tab") {
-                        e.preventDefault();
-                        const target = e.target as HTMLTextAreaElement;
-                        const start = target.selectionStart;
-                        const end = target.selectionEnd;
-                        const newValue = value.substring(0, start) + "  " + value.substring(end);
-                        onChange(newValue);
-                        // Restore cursor
-                        requestAnimationFrame(() => {
-                            target.selectionStart = target.selectionEnd = start + 2;
-                        });
-                    }
-                }}
-            />
+            <div className="flex-1 min-h-0 border border-border/50 rounded-lg overflow-hidden">
+                <CodeEditor
+                    value={value}
+                    onChange={onChange}
+                    language="javascript"
+                    className="border-0"
+                />
+            </div>
 
             {/* Helper text */}
             <div className="text-[10px] text-muted-foreground/50 px-1">

@@ -35,16 +35,53 @@ export function SaveRequestDialog() {
                 targetCollectionId = parseInt(collectionId);
             }
 
-            await db.requests.add({
-                name: name || "Untitled Request",
-                collectionId: targetCollectionId,
-                method: currentRequest.method,
-                url: currentRequest.url,
-                params: currentRequest.params.reduce((acc, p) => (p.key ? { ...acc, [p.key]: p.value } : acc), {}),
-                headers: currentRequest.headers.reduce((acc, h) => (h.key ? { ...acc, [h.key]: h.value } : acc), {}),
-                body: currentRequest.body,
-                createdAt: Date.now()
-            });
+            const { updateTab, activeTabId, addTab, tabs } = useAppStore.getState();
+
+            // Check if the current request is already saved (has an ID)
+            // If it has an ID, we should update it instead of adding a new one
+            if (currentRequest.id) {
+                await db.requests.update(currentRequest.id, {
+                    name: name || "Untitled Request",
+                    collectionId: targetCollectionId,
+                    method: currentRequest.method,
+                    url: currentRequest.url,
+                    params: currentRequest.params.reduce((acc, p) => (p.key ? { ...acc, [p.key]: p.value } : acc), {}),
+                    headers: currentRequest.headers.reduce((acc, h) => (h.key ? { ...acc, [h.key]: h.value } : acc), {}),
+                    body: currentRequest.body,
+                    bodyType: currentRequest.bodyType,
+                    bodyRawLanguage: currentRequest.bodyRawLanguage,
+                    bodyFormData: currentRequest.bodyFormData,
+                    bodyFormUrlEncoded: currentRequest.bodyFormUrlEncoded,
+                });
+                updateTab(activeTabId, {
+                    label: name || "Untitled Request",
+                    isDirty: false,
+                    id: currentRequest.id.toString() // Ensure the tab ID matches the saved request ID
+                });
+            } else {
+                // If it's a new request, add it to the database
+                const newRequestId = await db.requests.add({
+                    name: name || "Untitled Request",
+                    collectionId: targetCollectionId,
+                    method: currentRequest.method,
+                    url: currentRequest.url,
+                    params: currentRequest.params.reduce((acc, p) => (p.key ? { ...acc, [p.key]: p.value } : acc), {}),
+                    headers: currentRequest.headers.reduce((acc, h) => (h.key ? { ...acc, [h.key]: h.value } : acc), {}),
+                    body: currentRequest.body,
+                    bodyType: currentRequest.bodyType,
+                    bodyRawLanguage: currentRequest.bodyRawLanguage,
+                    bodyFormData: currentRequest.bodyFormData,
+                    bodyFormUrlEncoded: currentRequest.bodyFormUrlEncoded,
+                    createdAt: Date.now()
+                });
+
+                // Update the current tab to reflect the saved request's ID and label
+                updateTab(activeTabId, {
+                    label: name || "Untitled Request",
+                    isDirty: false,
+                    id: newRequestId.toString()
+                });
+            }
 
             setOpen(false);
             setName("");
