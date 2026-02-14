@@ -45,6 +45,38 @@
 
 API Hunter is designed to be secure by default. Scripts are executed in a sandboxed environment to prevent access to sensitive browser globals. No data is sent to external servers except for the API requests you explicitly trigger.
 
+## 🗺️ Roadmap & Upcoming Features
+
+We are actively working on making API Hunter more powerful. Here’s what’s coming next:
+
+### 🏗️ Phase 0: Core Architecture & Stability
+- **Unified Request Data Model**: Consistent state across tabs and saved requests with full draft persistence.
+- **IndexedDB Stability**: Explicit versioning and migrations for data safety.
+- **Memory Protection**: Smart handling of large response bodies and Blob streaming.
+
+### 🔧 Phase 1: UX Enhancements
+- **Tab Management**: Dirty indicators, close confirmations, and tab pinning.
+- **Extended cURL Support**: Broader flag support and auto-authentication conversion.
+- **History 2.0**: Enhanced metadata (size, duration) and pinned history items.
+
+### ⚡ Phase 2: Scripts & Security
+- **WebWorker Sandbox**: Secure execution of scripts isolated from the main thread.
+- **pm API**: Familiar Postman-compatible scripting API for environments and testing.
+
+### 🧪 Phase 3 & 4: Testing & Mocking
+- **Test Runner**: Run sequential scenarios with detailed reports.
+- **Dataset Support**: Data-driven testing with CSV/JSON files.
+- **Advanced Mocks**: Sandboxed HTML previews and dynamic response generation.
+
+### 🔐 Phase 5: Advanced Authentication
+- **OAuth 2.0 PKCE**: Native support for modern authorization flows.
+- **Secret Management**: UI masking for credentials and secret environment variables.
+
+### ⚪ Long-term Vision
+- **Load Testing**: Concurrent request runner with performance charts.
+- **Multi-Protocol**: Support for WebSockets, GraphQL, and gRPC.
+
 ---
 
+Built with ❤️ by the API Hunter Team
 
