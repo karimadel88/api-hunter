@@ -1,36 +1,50 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🎯 API Hunter
 
-## Getting Started
+**API Hunter** is a modern, lightweight, and security-first API client designed for developers who need speed and flexibility without the bloat. Built with Next.js and powered by IndexedDB for local-only data persistence.
 
-First, run the development server:
+![Sidebar Preview](file:///e:/private-projects/api-hunter/public/api-hunter-logo.png) (Logo placeholder)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## ✨ Core Features
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+-   **🚀 Fast & Lightweight**: No heavy desktop shell; runs directly in your browser with high performance.
+-   **📑 Multi-Tab Interface**: Work on multiple requests simultaneously with a familiar tabbed experience.
+-   **🔐 Local-First Persistence**: Your data stays on your machine. We use **Dexie.js (IndexedDB)** for robust local storage.
+-   **🌐 Environment Management**: Easily switch between Production, Staging, and Local environments with variable substitution.
+-   **📜 Scripting & Testing**: Automate workflows with Pre-request and Post-response scripts (leveraging a secure sandbox).
+-   **🛠️ Code Generation**: Instantly generate code snippets for cURL, JavaScript, Python, Go, and more.
+-   **📤 cURL Import**: Standard cURL support to quickly import and test existing commands.
+-   **🎭 Mock Server**: Simulate API responses with built-in mocking capabilities.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🛠️ Tech Stack
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+-   **Framework**: [Next.js](https://nextjs.org/) (App Router + Turbopack)
+-   **State Management**: [Zustand](https://github.com/pmndrs/zustand)
+-   **Persistence**: [Dexie.js](https://dexie.org/) (IndexedDB)
+-   **Styling**: Tailwind CSS + Shadcn UI
+-   **Icons**: Lucide React
+-   **HTTP Client**: Axios
 
-## Learn More
+## 🚀 Getting Started
 
-To learn more about Next.js, take a look at the following resources:
+1.  **Clone & Install**:
+    ```bash
+    git clone https://github.com/your-username/api-hunter.git
+    cd api-hunter
+    npm install
+    ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+2.  **Run Development Server**:
+    ```bash
+    npm run dev
+    ```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+3.  **Open in Browser**:
+    Navigate to `http://localhost:3000`.
 
-## Deploy on Vercel
+## 🛡️ Security
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+API Hunter is designed to be secure by default. Scripts are executed in a sandboxed environment to prevent access to sensitive browser globals. No data is sent to external servers except for the API requests you explicitly trigger.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+
