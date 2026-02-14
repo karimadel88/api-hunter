@@ -2,7 +2,7 @@
 
 **API Hunter** is a modern, lightweight, and security-first API client designed for developers who need speed and flexibility without the bloat. Built with Next.js and powered by IndexedDB for local-only data persistence.
 
-![Sidebar Preview](file:///e:/private-projects/api-hunter/public/api-hunter-logo.png) (Logo placeholder)
+![API Hunter Logo](public/logo.png)
 
 ## ✨ Core Features
 
